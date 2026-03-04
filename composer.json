@@ -1,7 +1,32 @@
 {
     "name": "check-hostcc/check-host-api-php",
-    "description": "A lightweight, lightning-fast PHP wrapper for the Check-Host.cc API.",
+    "description": "A lightweight, zero-dependency PHP 8.1+ wrapper for the Check-Host.cc API to perform global network diagnostics.",
+    "keywords": [
+        "check-host",
+        "monitoring",
+        "network-diagnostics",
+        "ping",
+        "mtr",
+        "dns-lookup",
+        "api-client",
+        "uptime"
+    ],
+    "homepage": "https://check-host.cc",
+    "readme": "README.md",
     "type": "library",
+    "license": "ISC",
+    "authors": [
+        {
+            "name": "Check-Host",
+            "email": "dev@check-host.cc",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/check-hostcc/check-host-api-php/issues",
+        "source": "https://github.com/check-hostcc/check-host-api-php",
+        "docs": "https://docs.check-host.cc"
+    },
     "require": {
         "php": "^8.1",
         "ext-curl": "*",
@@ -10,13 +35,6 @@
     "require-dev": {
         "phpunit/phpunit": "^10.5"
     },
-    "license": "ISC",
-    "authors": [
-        {
-            "name": "Check-Host",
-            "email": "dev@check-host.cc"
-        }
-    ],
     "autoload": {
         "psr-4": {
             "CheckHostCc\\CheckHostApi\\": "src/"
@@ -25,6 +43,14 @@
     "autoload-dev": {
         "psr-4": {
             "CheckHostCc\\CheckHostApi\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
         }
     }
 }
