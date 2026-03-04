@@ -23,6 +23,15 @@ Ensure you have PHP 8.1+ installed. You can install the package directly from Pa
 composer require check-hostcc/check-host-api-php
 ```
 
+### Manual Installation
+
+If you prefer not to use Composer, you can download the source code and require the class files directly:
+
+```php
+require_once '/path/to/src/Exceptions/CheckHostException.php';
+require_once '/path/to/src/CheckHost.php';
+```
+
 ## Quickstart
 
 ```php
@@ -50,7 +59,7 @@ This library supports both minimal invocations and detailed, options-rich reques
 ### Common Options Used in Examples
 - `region`: Array of Nodes or ISO Country Codes (e.g. `['DE', 'NL']`) or Continents (e.g. `['EU']`).
 - `repeatchecks`: Number of repeated probes to perform per node for higher accuracy (Live Check).
-- `timeout`: Connection timeout threshold in seconds (Currently disabled on Check-host backend, but supported).
+- `timeout`: Connection timeout threshold in seconds. Supported by methods where a timeout is applicable (e.g., HTTP, TCP).
 
 ---
 
