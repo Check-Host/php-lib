@@ -32,17 +32,9 @@
         "ext-curl": "*",
         "ext-json": "*"
     },
-    "require-dev": {
-        "phpunit/phpunit": "^10.5"
-    },
     "autoload": {
         "psr-4": {
             "CheckHostCc\\CheckHostApi\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "CheckHostCc\\CheckHostApi\\Tests\\": "tests/"
         }
     },
     "minimum-stability": "stable",
