@@ -6,7 +6,11 @@ require_once __DIR__ . '/../src/CheckHost.php';
 use CheckHostCc\CheckHostApi\CheckHost;
 
 try {
-    $api = new CheckHost();
+    // CI exposes CHECK_HOST_API_KEY as a masked GitLab CI variable (higher
+    // rate limits). Locally we fall back to anonymous limits.
+    $apikey = getenv('CHECK_HOST_API_KEY') ?: null;
+    if ($apikey) echo "(using API key from env)\n";
+    $api = new CheckHost($apikey);
 
     echo "Testing myip()...\n";
     $ip = $api->myip();
