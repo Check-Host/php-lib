@@ -245,4 +245,90 @@ class CheckHost
     {
         return $this->request('GET', '/report/' . urlencode($uuid));
     }
+
+    /**
+     * Fetches the dynamic 1200x630 PNG status map for a check UUID.
+     *
+     * Returns raw PNG bytes. Use `file_put_contents($path, $bytes)` to
+     * save to disk.
+     *
+     * @throws CheckHostException
+     */
+    public function ogImage(string $uuid): string
+    {
+        return $this->requestBinary(
+            '/report/' . urlencode($uuid) . '/og-image',
+            'image/png'
+        );
+    }
+
+    /**
+     * Fetches the per-country world map for a check UUID. Default
+     * format is SVG; pass 'png' with a resolution for the rasterised
+     * variant.
+     *
+     * @param string $uuid
+     * @param string $format     'svg' (default) or 'png'.
+     * @param string $resolution PNG resolution: 'low' (800px),
+     *                           'med' (1200px), or 'high' (2000px).
+     *                           Ignored for SVG.
+     * @return string Raw image bytes (UTF-8 text for SVG, binary for PNG).
+     * @throws CheckHostException
+     */
+    public function countryMap(
+        string $uuid,
+        string $format = 'svg',
+        string $resolution = 'med'
+    ): string {
+        if (!in_array($format, ['svg', 'png'], true)) {
+            throw new CheckHostException(
+                "format must be 'svg' or 'png', got '$format'."
+            );
+        }
+        if (!in_array($resolution, ['low', 'med', 'high'], true)) {
+            throw new CheckHostException(
+                "resolution must be 'low', 'med', or 'high', got '$resolution'."
+            );
+        }
+        $query = http_build_query(['format' => $format, 'res' => $resolution]);
+        $accept = $format === 'png' ? 'image/png' : 'image/svg+xml';
+        return $this->requestBinary(
+            '/report/' . urlencode($uuid) . '/country-map?' . $query,
+            $accept
+        );
+    }
+
+    /**
+     * Issues a GET request and returns the raw response body without
+     * trying to JSON-decode it. Used for binary endpoints (og-image,
+     * country-map).
+     *
+     * @throws CheckHostException
+     */
+    private function requestBinary(string $path, string $accept): string
+    {
+        $url = $this->baseUrl . '/' . ltrim($path, '/');
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Accept: ' . $accept,
+            'User-Agent: CheckHost-PHP-API/1.0.0',
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        $response = curl_exec($ch);
+        $error = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($response === false) {
+            throw new CheckHostException("Network Error: " . $error);
+        }
+        if ($httpCode >= 400) {
+            $msg = $httpCode === 429
+                ? "Ratelimit reached. Please provide an API key or slow down your requests."
+                : "API Error ($httpCode)";
+            throw new CheckHostException($msg, $httpCode);
+        }
+        return $response;
+    }
 }
