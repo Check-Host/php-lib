@@ -25,7 +25,7 @@
     "support": {
         "issues": "https://github.com/check-hostcc/check-host-api-php/issues",
         "source": "https://github.com/check-hostcc/check-host-api-php",
-        "docs": "https://docs.check-host.cc"
+        "docs": "https://check-host.cc/docs"
     },
     "require": {
         "php": "^8.1",
