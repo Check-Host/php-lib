@@ -1,0 +1,50 @@
+# GitLab CI for the Check-Host PHP SDK.
+#
+# Sync to github.com/Check-Host/php-lib is handled by a GitLab native
+# push mirror. Each job runs inside a clean PHP container via
+# `docker run` so the runner host doesn't need PHP installed locally.
+
+stages:
+  - validate
+  - test
+
+variables:
+  PHP_IMAGE: "php:8.3-cli-alpine"
+
+.with_composer: &with_composer
+  - >-
+    docker run --rm
+    -v "$CI_PROJECT_DIR:/work" -w /work
+    "$PHP_IMAGE"
+    sh -c "
+      apk add --no-cache --quiet curl unzip libzip-dev > /dev/null &&
+      docker-php-ext-install -j$(nproc) zip > /dev/null 2>&1 || true &&
+      curl -sS https://getcomposer.org/installer | php -- --quiet --install-dir=/usr/local/bin --filename=composer &&
+      $JOB_SCRIPT
+    "
+
+validate:
+  stage: validate
+  variables:
+    JOB_SCRIPT: "composer validate --strict"
+  script:
+    - *with_composer
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+test:
+  stage: test
+  parallel:
+    matrix:
+      - PHP_VERSION: ["8.1", "8.2", "8.3", "8.4"]
+  variables:
+    PHP_IMAGE: "php:${PHP_VERSION}-cli-alpine"
+    JOB_SCRIPT: "composer install --prefer-dist --no-progress --no-interaction && php tests/test_all.php"
+  script:
+    - *with_composer
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
