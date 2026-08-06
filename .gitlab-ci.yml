@@ -27,6 +27,8 @@ validate:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# Deterministic, offline unit tests - the cURL layer is stubbed, so this
+# job is unaffected by API availability or rate limits.
 test:
   stage: test
   parallel:
@@ -36,8 +38,24 @@ test:
   script:
     - *composer_setup
     - composer install --prefer-dist --no-progress
-    - php tests/test_all.php
+    - php tests/test_unit.php
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# Live smoke test against the production API. Exits non-zero on failure.
+# Allowed to fail so a transient API blip or rate limit doesn't block a
+# release, but it still shows up in the pipeline. Single PHP version -
+# the API surface doesn't vary across them.
+test_live:
+  stage: test
+  image: php:8.3-cli-alpine
+  script:
+    - *composer_setup
+    - composer install --prefer-dist --no-progress
+    - php tests/test_all.php
+  allow_failure: true
+  rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG

@@ -9,7 +9,9 @@ Seamlessly integrate global network diagnostics into your backend. Perform remot
 - **Zero Dependencies:** Built purely on the native PHP cURL extension. No Guzzle, no Symfony HTTP Client, zero package bloat.
 - **Bulletproof Payloads:** Strictly utilizes POST requests for all active monitoring endpoints. This completely eliminates nasty URL-encoding issues with complex hostnames or custom UDP payloads.
 - **Modern & Clean:** Written for PHP 8.1+ with full type hinting and clean structure.
-- **Smart Authentication:** API Key auto-injection. Configure your key once during initialization, and the core SDK seamlessly handles all authentication payloads under the hood.
+- **Header-Based Authentication:** Configure your token once during initialization; the SDK attaches it as an `Authorization: Bearer` header to every request. The token never lands in a URL or a request body.
+
+- **Network Intelligence & Fullscan:** Passive IP / ASN / prefix / domain / certificate / port / software lookups, plus deep on-demand scans with a built-in polling helper.
 
 ## Requirements
 
@@ -39,16 +41,36 @@ require 'vendor/autoload.php';
 
 use CheckHostCc\CheckHostApi\CheckHost;
 
-// Initialize the client. The API Key is optional.
-// Without an API key, standard public rate limits apply.
-// $checkHost = new CheckHost('YOUR_API_KEY_HERE');
-// Or leave empty: new CheckHost()
-$checkHost = new CheckHost();
+// Initialize the client. The API token is optional.
+// Without a token, standard public rate limits apply.
+$checkHost = new CheckHost('YOUR_API_TOKEN_UUID');
+// Or leave empty for anonymous access: new CheckHost()
 
 // Example: Retrieve all current nodes
 $locations = $checkHost->locations();
 print_r($locations);
 ```
+
+## Authentication
+
+The token is sent as an `Authorization: Bearer <token>` header on every
+request — GET, POST and binary alike. It is never placed in the query string
+or the request body, so it does not leak into access logs, referrer headers
+or browser history.
+
+```php
+// Explicit
+$checkHost = new CheckHost('YOUR_API_TOKEN_UUID');
+
+// Or from the environment (CHECK_HOST_API_TOKEN)
+$checkHost = new CheckHost();
+```
+
+> **Migrating from 1.0.x:** the token used to travel in the JSON body as an
+> `apikey` field. That field is deprecated server-side. The constructor
+> argument is positional and unchanged, so `new CheckHost($yourToken)` keeps
+> working as-is. The legacy `CHECK_HOST_API_KEY` environment variable is
+> still read as a fallback.
 
 ---
 
@@ -194,6 +216,125 @@ $taskUuid = 'c0b4b0e3-aed7-4ae2-9f53-7bac879697cb';
 
 // Fetch the result payload
 $report = $checkHost->report($taskUuid);
+```
+
+---
+
+### Network Intelligence
+
+Passive lookups against the dataset behind the entity pages — no check is dispatched to the monitoring nodes, so results come back immediately. Every response carries a `data` section; keys we hold no data for come back as empty arrays or `null`.
+
+#### IP Profile
+Reverse DNS, open ports and banners, TLS certificates, BGP/ASN attribution, GeoIP, tech-stack, co-hosted domains, origin-leak candidates, threat-intel matches and honeypot activity.
+```php
+$intel = $checkHost->ipIntel('1.1.1.1');
+echo $intel['data']['bgp']['as_name'];                      // Cloudflare, Inc.
+print_r(array_column($intel['data']['open_ports'], 'port')); // [443, ...]
+```
+
+Honeypot passwords are never returned in cleartext — entries expose only `password_captured` (bool) and `password_len`.
+
+#### ASN Profile
+Prefix counts, announced IP totals, peers / providers / customers, IXP memberships, RPKI coverage, GeoIP footprint and hosted-domain summaries. Accepts `13335` or `'AS13335'`.
+```php
+$intel = $checkHost->asnIntel('AS13335');
+echo $intel['data']['prefix_count'], ' ', $intel['data']['rpki_coverage_pct'];
+```
+
+#### Prefix, Domain and Certificate
+```php
+$prefix = $checkHost->prefixIntel('1.1.1.0', 24);
+$domain = $checkHost->domainIntel('check-host.cc');
+$cert   = $checkHost->certIntel('3a1b8f0c…9f90');   // 64-char hex fingerprint
+
+print_r($domain['data']['subdomains']);
+print_r($cert['data']['served_by']);
+```
+
+#### Port and Software Exposure
+```php
+$port = $checkHost->portIntel(443);
+echo $port['well_known'], ' ', $port['data']['open_ips'];
+
+$nginx  = $checkHost->softwareIntel('nginx');            // all versions
+$pinned = $checkHost->softwareIntel('nginx', '1.24.0');  // one version
+```
+
+---
+
+### Fullscan
+
+A deep, on-demand multi-stage scan (ports + banners + TLS + DNS + threat-intel) of an IP, CIDR, domain or ASN. Asynchronous: submit, poll, then read the results. Budget minutes, not seconds.
+
+```php
+$job = $checkHost->fullscan('check-host.cc', 'deep');
+echo $job['uuid'], ' ', $job['status'];      // ... pending
+
+// Block until the job reaches a terminal status (complete/partial/failed)
+$finished = $checkHost->waitForFullscan($job['uuid'], 5, 300);
+echo $finished['status'], " {$finished['subjobs_done']}/{$finished['subjobs_total']}";
+
+$results = $checkHost->fullscanResults($job['uuid']);
+foreach ($results['data']['open_ports'] as $entry) {
+    echo $entry['port'], ' ', $entry['service'], "\n";
+}
+```
+
+Scopes: `basic` (top-100 ports + banner), `deep` (default — full port range, TLS, body and threat-intel), `full` (deep plus subdomain enumeration; domains only).
+
+Anonymous CIDR submissions are capped at `/24` (v4) and `/120` (v6); an API token raises that to `/20` and `/112`.
+
+Before dispatching a scan, check whether a recent one already exists:
+```php
+$recent = $checkHost->recentScans('check-host.cc');
+foreach ($recent['recent_scans'] as $prior) {
+    if (CheckHost::isFullscanFinished($prior)) {
+        $results = $checkHost->fullscanResults($prior['uuid']);
+        break;
+    }
+}
+```
+
+For manual polling loops, `fullscanStatus($uuid)` returns `['success' => bool, 'job' => [...]]`.
+
+---
+
+## API surface
+
+| Method | Endpoint |
+|---|---|
+| `myip()` | `GET /myip` |
+| `myinfo()` | `GET /myinfo` |
+| `locations()` | `GET /locations` |
+| `info($target)` | `POST /info` |
+| `whois($target)` | `POST /whois` |
+| `ping($target, $options)` | `POST /ping` |
+| `dns($target, $options)` | `POST /dns` |
+| `tcp($target, $port, $options)` | `POST /tcp` |
+| `udp($target, $port, $options)` | `POST /udp` |
+| `http($target, $options)` | `POST /http` |
+| `mtr($target, $options)` | `POST /mtr` |
+| `report($uuid)` | `GET /report/{uuid}` |
+| `ogImage($uuid)` | `GET /report/{uuid}/og-image` |
+| `countryMap($uuid, $format, $resolution)` | `GET /report/{uuid}/country-map` |
+| `ipIntel($ip)` | `GET /ip/{ip}` |
+| `asnIntel($asn)` | `GET /as/{asn}` |
+| `prefixIntel($net, $mask)` | `GET /prefix/{net}/{mask}` |
+| `domainIntel($domain)` | `GET /domain/{domain}` |
+| `certIntel($sha256)` | `GET /cert/{sha256}` |
+| `portIntel($port)` | `GET /port/{port}` |
+| `softwareIntel($name, $version)` | `GET /software/{name}[/{version}]` |
+| `recentScans($target)` | `GET /scan/{target}` |
+| `fullscan($target, $scope)` | `POST /fullscan` |
+| `fullscanStatus($uuid)` | `GET /fullscan/{uuid}` |
+| `fullscanResults($uuid)` | `GET /fullscan/{uuid}/results` |
+| `waitForFullscan($uuid, $interval, $maxWait, $requireComplete)` | polls `GET /fullscan/{uuid}` |
+
+## Development
+
+```bash
+php tests/test_unit.php   # offline unit tests (cURL stubbed, no network)
+php tests/test_all.php    # live smoke test against the production API
 ```
 
 ## License
